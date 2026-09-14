@@ -1,145 +1,38 @@
-# Multivariate Linear Regression — Boston Housing (CS430 HW2)
+# Multivariate Linear Regression — Boston Housing
 
-## 1. Purpose
+**Type:** Team project
+**Contributors:** Carter Ward, Boyd Emmons
+**Course:** CS 430-1 (Machine Learning) — HW2
+**Completed:** 10/07/2025
 
-This is my second linear regression assignment, built on top of an earlier
-single-feature (AGE-only) regression project. Where that first assignment
-fit one predictor to one target, this one asks for **multivariate** linear
-regression: fitting a model with several input features at once, both by
-gradient descent and by the closed-form normal equation. Boyd Emmons and I
-worked through the assignment together (see the header comment in
-`boston_linreg_hw2.py`), and the point of the exercise is to actually
-implement the regression machinery ourselves — matrix operations, gradient
-descent, and Gaussian elimination — rather than call `sklearn.LinearRegression`
-and be done with it. That's the "why": understanding what a regression
-library does under the hood before trusting it as a black box.
+## Purpose
 
-## 2. Problem and Approach
+This assignment extends an earlier single-feature regression project into **multivariate** linear regression: fitting a model with several input features at once. We implemented both gradient descent and the closed-form normal equation from scratch, rather than calling `sklearn.LinearRegression`, to understand what a regression library does under the hood.
 
-The problem is the classic **Boston Housing** dataset: predict `MEDV`
-(median value of owner-occupied homes, in $1000s) from a set of
-neighborhood-level features such as crime rate, room count, pupil-teacher
-ratio, distance to employment centers, and so on.
+## Problem and Approach
 
-I deliberately avoided `numpy`/`pandas`/`sklearn` and wrote everything —
-the file parser, the statistics, the linear algebra, and both training
-algorithms — in pure Python using nested lists. The assignment has three
-parts, all driven from `main()`:
+The task is the classic Boston Housing dataset: predict `MEDV` (median home value, $1000s) from neighborhood features like crime rate, room count, and pupil-teacher ratio. We avoided `numpy`/`pandas`/`sklearn` entirely, writing the parser, statistics, linear algebra, and training algorithms in pure Python. The assignment has three parts: (1) gradient descent on two standardized features (`AGE`, `TAX`), (2) gradient descent on all 13 standardized features, and (3) the normal equation on the same two-feature (`AGE`, `TAX`) problem, unscaled, as a cross-check.
 
-- **Part 1 (2a):** Gradient descent on just two standardized features,
-  `AGE` and `TAX`, predicting `MEDV`. This mirrors the update rule from the
-  earlier single-feature project, just extended to two inputs.
-- **Part 1 (2b):** Gradient descent on **all 13** standardized features at
-  once, to see how much a fuller model improves on the two-feature one.
-- **Part 2 (2a):** The same `AGE`/`TAX` problem as 2a, but solved with the
-  **normal equation** (closed-form OLS) on the raw, unscaled features
-  instead of gradient descent — as a cross-check that the two methods agree.
+## Structure and Methodologies
 
-## 3. Structure and Methodologies
+- No dependencies beyond the standard library — `X`/`y` and weight vectors are plain nested Python lists (bias term prepended as a column of 1s).
+- Hand-rolled statistics (`mean`/`stdev`) and standardization fit on training data only, then applied to both train and validation sets to avoid leakage.
+- From-scratch matrix operations (`mat_transpose`, `mat_mul`, `mat_vec_mul`) with nested loops.
+- Gaussian elimination with partial pivoting (`solve_linear_system`) to solve `(XᵀX)w = Xᵀy` for the normal equation, with a small ridge fallback for numerical stability.
+- Both a manual two-feature gradient descent update and a generalized matrix-based gradient descent that works for any feature count.
 
-**Dependencies:** none beyond the Python standard library — no `numpy`,
-`pandas`, or `sklearn`. Every piece of math is hand-rolled.
+## Process
 
-**Data structures:**
-- `X` is a list of lists (rows × features); `y` is a flat list of targets.
-- Weight vectors (`theta` / `w`) are plain Python lists, with the bias term
-  stored at index 0 (a leading column of `1.0`s is prepended to `X` via
-  `add_bias_column`).
+1. Parse `boston.txt` (whitespace-delimited UCI format) into 506 rows of 14 values.
+2. Split into the first 456 rows for training and the last 50 for validation (non-random, per spec).
+3. Standardize features (training stats only) for the gradient descent runs; leave `AGE`/`TAX` unscaled for the normal equation run.
+4. Train all three models: 2-feature GD, 13-feature GD (both 5000 epochs, `alpha=0.01`), and the normal equation via Gaussian elimination.
+5. Evaluate each model's MSE on the 50-row validation set.
+6. Write weights and validation MSEs to `output.txt` and print a summary.
 
-**Core building blocks I implemented:**
-- `mean` / `stdev` — from-scratch statistics (population standard
-  deviation) used to z-score features.
-- `fit_standardizer` / `apply_standardizer` — compute mean/std on the
-  **training** columns only, then apply those same stats to both train and
-  validation data, so the validation set never leaks into preprocessing.
-- `mat_shape`, `mat_transpose`, `mat_mul`, `mat_vec_mul` — basic matrix
-  operations built with nested loops (no linear-algebra library).
-- `solve_linear_system` — Gaussian elimination with partial pivoting to
-  solve `(XᵀX) w = Xᵀy` for the normal equation. It falls back to a tiny
-  ridge term (`1e-8`+) if it hits a (near-)singular pivot, which is also
-  used proactively as `ridge_lambda=1e-10` in `normal_equation` for
-  numerical stability.
-- `gradient_descent_two_feature` — the original hand-written 2-feature
-  update rule (`theta -= alpha * (1/m) * sum(error * x)`), kept close to
-  the earlier single-feature project's formulas.
-- `gradient_descent_general` — a vectorized-by-hand generalization that
-  works for any number of features using the matrix helpers above
-  (`gradient = (2/N) * Xᵀ(Xw - y)`).
-- `normal_equation` — closed-form OLS: `w = (XᵀX)⁻¹ Xᵀy`, solved via the
-  Gaussian elimination routine rather than an explicit matrix inverse.
-- `mse` — mean squared error, used as the loss/evaluation metric throughout.
+## Outcome
 
-## 4. Process
-
-1. **Load the data.** `load_boston_txt` reads `boston.txt` (the classic
-   UCI-format Boston housing file, whitespace-delimited and wrapped across
-   multiple lines per record) line by line, skips the descriptive header
-   text, floods all numeric tokens into a running buffer, and slices that
-   buffer into rows of 14 values (13 features + `MEDV`) once enough numbers
-   have accumulated. This yields 506 complete rows.
-2. **Split train/validation.** Per the assignment spec, the split isn't
-   random: the **first 456 rows** are training data and the **last 50
-   rows** are held out for validation (`train_rows = data[:N-50]`,
-   `val_rows = data[N-50:]`).
-3. **Preprocess.** For the gradient-descent runs (2a and 2b), I compute the
-   mean and standard deviation of each feature column **on the training
-   rows only**, then z-score both the training and validation rows using
-   those same statistics. For the normal-equation run (Part 2, 2a), I
-   intentionally leave `AGE`/`TAX` **unscaled** to compare a scaled vs.
-   unscaled fit on the same two features.
-4. **Train.**
-   - 2a GD: `gradient_descent_general` on `[bias, AGE_z, TAX_z]` for 5000
-     epochs at learning rate `alpha=0.01`.
-   - 2b GD: the same routine on `[bias]` + all 13 standardized features for
-     5000 epochs at `alpha=0.01`.
-   - 2a NE: `normal_equation` solves for weights directly on `[bias, AGE,
-     TAX]` (unscaled) via Gaussian elimination.
-5. **Evaluate.** Each model predicts on the 50-row validation set
-   (`mat_vec_mul`) and I compute validation MSE (`mse`) for all three runs.
-6. **Report.** `write_output` writes all three weight vectors and their
-   validation MSEs to `output.txt`, and `main()` prints a short summary to
-   the console.
-
-## 5. Outcome
-
-Results from the recorded run (`output.txt`):
-
-| Model | Features | Validation MSE |
-|---|---|---|
-| GD (2a) | AGE_z, TAX_z | **22.04601584** |
-| GD (2b) | all 13 features, standardized | **10.94781194** |
-| Normal Equation (2a) | AGE, TAX (unscaled) | **22.04601584** |
-
-A few things stand out:
-
-- **Gradient descent and the normal equation agree exactly** on the 2a
-  problem (both land on MSE `22.04601584`), which is a good sanity check
-  that my from-scratch GD implementation actually converges to the true
-  OLS solution — even though one model trained on standardized features
-  and the other on raw ones, the underlying linear fit (and its
-  predictions) is the same, just expressed with different coefficients:
-  `theta_gd_2a = [22.941, -1.524, -3.652]` (standardized) vs.
-  `theta_ne_2a = [35.447, -0.0527, -0.0230]` (unscaled).
-- **Using all 13 features roughly halves the validation error** compared
-  to using just `AGE` and `TAX` (MSE drops from ~22.05 to ~10.95),
-  confirming that home value depends on much more than housing age and tax
-  rate — the 2b weights show `LSTAT` (% lower status population, w ≈
-  -4.05), `RM`-adjacent effects, and `TAX`/`PTRATIO`/`DIS` all pulling
-  noticeably on the prediction.
-- Both models share the same bias term in the standardized runs (`22.941`),
-  which makes sense: with z-scored features the intercept is just the mean
-  `MEDV` of the training set, independent of which features are included.
-
-**What this demonstrates:** I can build the full OLS pipeline — data
-loading, train/validation splitting without leakage, standardization,
-matrix algebra, gradient descent, and closed-form Gaussian elimination —
-without leaning on a regression library, and get gradient descent and the
-normal equation to agree numerically. That agreement is the part I'm
-proudest of: it's easy to write gradient descent that "looks like it
-works," but getting it to converge to the exact same solution as the
-closed-form answer is a much stronger sanity check, and confirms I
-understand the cost surface (and why standardizing features helps GD
-converge cleanly) rather than just copying update-rule pseudocode.
+Validation MSE: 2-feature gradient descent (`AGE`, `TAX`, standardized) scored **22.046**; the 13-feature gradient descent scored **10.948**, roughly halving the error and confirming home value depends on much more than age and tax rate; the normal equation on the same 2-feature problem (unscaled) matched the 2-feature GD result exactly at **22.046**. That exact agreement between gradient descent and the closed-form solution was the strongest sanity check — it shows the from-scratch GD implementation converges to the true OLS solution rather than just approximating it, and we came away with a working, from-scratch understanding of standardization, matrix algebra, gradient descent, and Gaussian elimination.
 
 ## How to run
 
@@ -147,6 +40,4 @@ converge cleanly) rather than just copying update-rule pseudocode.
 python3 boston_linreg_hw2.py
 ```
 
-This expects `boston.txt` in the same directory. It writes results to
-`output.txt` and prints a short summary of the three validation MSEs to
-the console.
+Expects `boston.txt` in the same directory; writes results to `output.txt`.
